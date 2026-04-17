@@ -63,7 +63,8 @@ const authMiddleware = async (req: any, res: any, next: any) => {
   try {
     const { data: { user }, error } = await supabaseAuth.auth.getUser(token);
     if (error || !user) {
-      return res.status(401).json({ error: 'Недействительный токен' });
+      console.error('Auth error:', error?.message, 'Token prefix:', token?.substring(0, 20) + '...');
+      return res.status(401).json({ error: error?.message || 'Недействительный токен' });
     }
     req.user = user;
 
@@ -86,7 +87,7 @@ const authMiddleware = async (req: any, res: any, next: any) => {
         companyId = company?.id || null;
       }
       
-      const { data: newProfile } = await supabase.from('user_profiles').insert({
+      const { data: newProfile, error: insertErr } = await supabase.from('user_profiles').insert({
         user_id: user.id,
         email: user.email,
         full_name: user.user_metadata?.full_name || '',
@@ -94,14 +95,19 @@ const authMiddleware = async (req: any, res: any, next: any) => {
         is_owner: isFirst,
         company_id: companyId
       }).select().single();
+      
+      if (insertErr) {
+        console.error('Profile insert error:', insertErr.message);
+      }
       profile = newProfile;
     }
     
     req.profile = profile;
     req.companyId = profile?.company_id || null;
     next();
-  } catch (e) {
-    return res.status(401).json({ error: 'Ошибка авторизации' });
+  } catch (e: any) {
+    console.error('Auth middleware crash:', e.message);
+    return res.status(401).json({ error: 'Ошибка авторизации: ' + (e.message || '') });
   }
 };
 

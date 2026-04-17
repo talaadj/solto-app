@@ -12,7 +12,15 @@ const API_BASE = isLocalDev ? '' : (import.meta.env.VITE_API_URL || 'https://sol
 // --- Auth-aware fetch helper ---
 
 async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
-  const { data: { session } } = await supabase.auth.getSession();
+  // Get fresh session (auto-refreshes expired tokens)
+  let { data: { session } } = await supabase.auth.getSession();
+  
+  // If no session or token looks expired, force refresh
+  if (!session?.access_token) {
+    const { data } = await supabase.auth.refreshSession();
+    session = data.session;
+  }
+
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string> || {}),
@@ -26,7 +34,20 @@ async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Re
   const timeout = setTimeout(() => controller.abort(), 60000);
   
   try {
-    const res = await fetch(API_BASE + url, { ...options, headers, signal: controller.signal });
+    let res = await fetch(API_BASE + url, { ...options, headers, signal: controller.signal });
+    
+    // If 401, try refreshing token once and retry
+    if (res.status === 401 && session) {
+      const { data } = await supabase.auth.refreshSession();
+      if (data.session?.access_token) {
+        headers['Authorization'] = `Bearer ${data.session.access_token}`;
+        const controller2 = new AbortController();
+        const timeout2 = setTimeout(() => controller2.abort(), 60000);
+        res = await fetch(API_BASE + url, { ...options, headers, signal: controller2.signal });
+        clearTimeout(timeout2);
+      }
+    }
+    
     clearTimeout(timeout);
     return res;
   } catch (e: any) {
