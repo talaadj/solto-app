@@ -32,7 +32,7 @@ if (!isGeminiConfigured) {
   console.warn("⚠️  GEMINI_API_KEY не настроен! ИИ-агенты не будут работать.");
   console.warn("   Получите ключ на https://aistudio.google.com/apikey и добавьте в .env.local");
 }
-const ai = new GoogleGenAI({ apiKey: geminiKey });
+const ai = isGeminiConfigured ? new GoogleGenAI({ apiKey: geminiKey }) : null;
 
 // ============================================================
 // HELPER: Create notification for directors
@@ -249,7 +249,19 @@ async function storekeeperAgentFn(itemName: string, quantity: number, action: st
 async function startServer() {
   const app = express();
   app.use(express.json());
-  const PORT = 3000;
+
+  // CORS for mobile APK (Capacitor sends from capacitor://localhost or http://localhost)
+  app.use((req: any, res: any, next: any) => {
+    const origin = req.headers.origin || '*';
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.header('Access-Control-Allow-Credentials', 'true');
+    if (req.method === 'OPTIONS') return res.sendStatus(200);
+    next();
+  });
+
+  const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 
   // ---- AI API Routes (protected) ----
   const AI_KEY_ERROR = "GEMINI_API_KEY не настроен. Получите ключ на https://aistudio.google.com/apikey и добавьте в .env.local";
