@@ -14,7 +14,19 @@ async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Re
   if (session?.access_token) {
     headers['Authorization'] = `Bearer ${session.access_token}`;
   }
-  return fetch(API_BASE + url, { ...options, headers });
+  
+  // Add timeout for Render cold starts (up to 60s)
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 60000);
+  
+  try {
+    const res = await fetch(API_BASE + url, { ...options, headers, signal: controller.signal });
+    clearTimeout(timeout);
+    return res;
+  } catch (e: any) {
+    clearTimeout(timeout);
+    throw e;
+  }
 }
 
 // --- AI Agent Proxies (server-side) ---

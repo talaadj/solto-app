@@ -85,23 +85,31 @@ function AppContent() {
   const role = (profile?.role || 'director') as UserRole;
 
   const fetchData = async () => {
-    const [projs, inv, trans] = await Promise.all([
-      api.getProjects(),
-      api.getInventory(),
-      api.getTransactions()
-    ]);
-    setProjects(projs);
-    setInventory(inv);
-    setTransactions(trans);
-    
-    if (projs.length > 0 && !currentProject) {
-      setCurrentProject(projs[0]);
+    try {
+      const [projs, inv, trans] = await Promise.all([
+        api.getProjects().catch(() => []),
+        api.getInventory().catch(() => []),
+        api.getTransactions().catch(() => [])
+      ]);
+      setProjects(projs || []);
+      setInventory(inv || []);
+      setTransactions(trans || []);
+      
+      if (projs && projs.length > 0 && !currentProject) {
+        setCurrentProject(projs[0]);
+      }
+    } catch (e) {
+      console.error('fetchData error:', e);
     }
   };
 
   const fetchRequests = async () => {
-    const reqs = await api.getRequests(currentProject?.id, role);
-    setRequests(reqs);
+    try {
+      const reqs = await api.getRequests(currentProject?.id, role);
+      setRequests(reqs || []);
+    } catch (e) {
+      console.error('fetchRequests error:', e);
+    }
   };
 
   useEffect(() => { fetchData(); }, []);
