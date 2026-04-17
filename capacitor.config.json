@@ -6,6 +6,10 @@
     "allowMixedContent": true,
     "backgroundColor": "#F8F9FA"
   },
+  "server": {
+    "androidScheme": "https",
+    "allowNavigation": ["solto-app.onrender.com", "itknqtugqzgpntffyyiu.supabase.co"]
+  },
   "plugins": {
     "SplashScreen": {
       "launchShowDuration": 2000,

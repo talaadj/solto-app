@@ -29,6 +29,25 @@ async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Re
   }
 }
 
+// Safe JSON parse helpers — prevent .map() crash on error objects
+async function jsonArray(res: Response): Promise<any[]> {
+  try {
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  } catch { return []; }
+}
+
+async function jsonObj(res: Response): Promise<any> {
+  try {
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Ошибка сервера' }));
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+    return await res.json();
+  } catch (e) { throw e; }
+}
+
 // --- AI Agent Proxies (server-side) ---
 
 export const foremanAgent = async (prompt: string) => {
@@ -36,11 +55,7 @@ export const foremanAgent = async (prompt: string) => {
     method: 'POST',
     body: JSON.stringify({ prompt }),
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: 'Ошибка сервера' }));
-    throw new Error(err.error || 'Ошибка при обращении к ИИ');
-  }
-  return res.json();
+  return jsonObj(res);
 };
 
 export const snipSearchAgent = async (query: string) => {
@@ -48,8 +63,7 @@ export const snipSearchAgent = async (query: string) => {
     method: 'POST',
     body: JSON.stringify({ query }),
   });
-  if (!res.ok) return [];
-  return res.json();
+  return jsonArray(res);
 };
 
 export const procurementAgent = async (requestTitle: string, requestDescription: string, projectAddress: string) => {
@@ -57,11 +71,7 @@ export const procurementAgent = async (requestTitle: string, requestDescription:
     method: 'POST',
     body: JSON.stringify({ requestTitle, requestDescription, projectAddress }),
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: 'Ошибка сервера' }));
-    throw new Error(err.error || 'Ошибка при обращении к ИИ');
-  }
-  return res.json();
+  return jsonObj(res);
 };
 
 export const accountantAgent = async (action: string, amount: number, description: string) => {
@@ -88,7 +98,7 @@ export const storekeeperAgent = async (itemName: string, quantity: number, actio
 
 export const api = {
   // Projects
-  getProjects: () => fetchWithAuth('/api/projects').then(r => r.json()),
+  getProjects: () => fetchWithAuth('/api/projects').then(jsonArray),
   createProject: (name: string, address: string) =>
     fetchWithAuth('/api/projects', {
       method: 'POST',
@@ -101,7 +111,7 @@ export const api = {
     if (role !== 'director' && projectId) {
       url += `?project_id=${projectId}`;
     }
-    return fetchWithAuth(url).then(r => r.json());
+    return fetchWithAuth(url).then(jsonArray);
   },
   createRequest: (projectId: number, title: string, description: string, quantity?: number, unit?: string) =>
     fetchWithAuth('/api/requests', {
@@ -118,7 +128,7 @@ export const api = {
 
   // Procurement
   getOffers: (requestId: number) =>
-    fetchWithAuth(`/api/procurement/${requestId}`).then(r => r.json()),
+    fetchWithAuth(`/api/procurement/${requestId}`).then(jsonArray),
   updateOfferStatus: (id: number, status: string, paymentData?: { approved_quantity?: number; approved_amount?: number; payment_method?: string; payment_notes?: string }) =>
     fetchWithAuth(`/api/procurement/${id}`, {
       method: 'PATCH',
@@ -131,7 +141,7 @@ export const api = {
     }).then(r => r.json()),
 
   // Inventory
-  getInventory: () => fetchWithAuth('/api/inventory').then(r => r.json()),
+  getInventory: () => fetchWithAuth('/api/inventory').then(jsonArray),
   updateInventory: (item_name: string, quantity: number, unit: string) =>
     fetchWithAuth('/api/inventory/update', {
       method: 'POST',
@@ -139,7 +149,7 @@ export const api = {
     }).then(r => r.json()),
 
   // Transactions
-  getTransactions: () => fetchWithAuth('/api/transactions').then(r => r.json()),
+  getTransactions: () => fetchWithAuth('/api/transactions').then(jsonArray),
   createTransaction: (type: string, amount: number, description: string) =>
     fetchWithAuth('/api/transactions', {
       method: 'POST',
@@ -147,19 +157,28 @@ export const api = {
     }).then(r => r.json()),
 
   // Profile
-  getProfile: () => fetchWithAuth('/api/profile').then(r => r.json()),
+  getProfile: async () => {
+    try {
+      const res = await fetchWithAuth('/api/profile');
+      if (!res.ok) return { role: 'director', full_name: '', email: '', user_id: '', project_ids: '', is_owner: 0 };
+      const data = await res.json();
+      return data && data.user_id ? data : { role: 'director', full_name: '', email: '', user_id: '', project_ids: '', is_owner: 0 };
+    } catch {
+      return { role: 'director', full_name: '', email: '', user_id: '', project_ids: '', is_owner: 0 };
+    }
+  },
   updateProfile: (data: { full_name?: string }) =>
     fetchWithAuth('/api/profile', { method: 'PATCH', body: JSON.stringify(data) }).then(r => r.json()),
 
   // Team (Director only)
-  getTeam: () => fetchWithAuth('/api/team').then(r => r.json()),
+  getTeam: () => fetchWithAuth('/api/team').then(jsonArray),
   updateTeamMember: (userId: string, data: { role?: string; project_ids?: number[] }) =>
     fetchWithAuth(`/api/team/${userId}`, { method: 'PATCH', body: JSON.stringify(data) }).then(r => r.json()),
   removeTeamMember: (userId: string) =>
     fetchWithAuth(`/api/team/${userId}`, { method: 'DELETE' }).then(r => r.json()),
 
   // Notifications
-  getNotifications: () => fetchWithAuth('/api/notifications').then(r => r.json()),
+  getNotifications: () => fetchWithAuth('/api/notifications').then(jsonArray),
   markNotificationRead: (id: number) =>
     fetchWithAuth(`/api/notifications/${id}/read`, { method: 'PATCH' }).then(r => r.json()),
   markAllNotificationsRead: () =>
@@ -167,7 +186,7 @@ export const api = {
 
   // Schedule / Gantt
   getSchedule: (projectId: number) =>
-    fetchWithAuth(`/api/schedule/${projectId}`).then(r => r.json()),
+    fetchWithAuth(`/api/schedule/${projectId}`).then(jsonArray),
   createScheduleTask: (data: { project_id: number; title: string; start_date: string; end_date: string; parent_id?: number; color?: string }) =>
     fetchWithAuth('/api/schedule', { method: 'POST', body: JSON.stringify(data) }).then(r => r.json()),
   updateScheduleTask: (id: number, data: Record<string, any>) =>
