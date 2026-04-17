@@ -18,6 +18,7 @@ import { AccountantView } from './views/AccountantView';
 import { StorekeeperView } from './views/StorekeeperView';
 import { TeamManagementView } from './views/TeamManagementView';
 import { GanttView } from './views/GanttView';
+import ProfileView from './components/ProfileView';
 
 // Error Boundary to prevent view crashes from killing the app
 interface EBProps { children: React.ReactNode; viewName: string; }
@@ -205,6 +206,7 @@ function AppContent() {
       { id: 'storekeeper', label: 'Склад', icon: Warehouse, roles: ['director', 'storekeeper'] },
       { id: 'gantt', label: 'График', icon: CalendarDays, roles: ['director', 'foreman'] },
       { id: 'team', label: 'Команда', icon: Users, roles: ['director'] },
+      { id: 'profile', label: 'Профиль', icon: UserCircle, roles: ['director', 'foreman', 'procurement', 'accountant', 'storekeeper', 'viewer'] },
     ];
     return allItems.filter(item => item.roles.includes(role));
   };
@@ -517,9 +519,12 @@ function AppContent() {
               <p className="text-[10px] lg:text-xs font-bold text-gray-400 uppercase tracking-widest">Проект</p>
               <p className="font-bold text-sm lg:text-base">{currentProject?.name || 'Не выбран'}</p>
             </div>
-            <div className="w-8 h-8 lg:w-10 lg:h-10 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 font-bold text-sm shrink-0">
-              {user?.email?.charAt(0).toUpperCase() || '?'}
-            </div>
+            <button 
+              onClick={() => setActiveView('profile')}
+              className="w-8 h-8 lg:w-10 lg:h-10 bg-indigo-500 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0 hover:bg-indigo-600 transition-colors"
+            >
+              {(profile?.full_name || user?.email || '?').charAt(0).toUpperCase()}
+            </button>
           </div>
         </header>
 
@@ -539,6 +544,7 @@ function AppContent() {
               {activeView === 'storekeeper' && <StorekeeperView inventory={inventory} onAddItem={handleAddItem} />}
               {activeView === 'team' && <TeamManagementView projects={projects} />}
               {activeView === 'gantt' && <GanttView projects={projects} selectedProject={currentProject} />}
+              {activeView === 'profile' && <ProfileView profile={profile!} onProfileUpdate={setProfile} />}
             </ViewErrorBoundary>
           </motion.div>
         </AnimatePresence>

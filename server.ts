@@ -622,7 +622,7 @@ async function startServer() {
       sort_order: (maxRow?.sort_order || 0) + 1
     }).select().single();
     if (error) return res.status(500).json({ error: error.message });
-    await createNotification(req.user.id, 'schedule', 'Новый этап', `Добавлен этап "${title}" в график`);
+    await createNotification(req.user.id, req.companyId, 'schedule', 'Новый этап', `Добавлен этап "${title}" в график`);
     res.json(data);
   });
 
