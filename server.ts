@@ -35,11 +35,10 @@ if (!isGeminiConfigured) {
 const ai = isGeminiConfigured ? new GoogleGenAI({ apiKey: geminiKey }) : null;
 
 // ============================================================
-// HELPER: Create notification for directors
+// HELPER: Create notification for directors in same company
 // ============================================================
-async function createNotification(userId: string, type: string, title: string, message: string, link?: string) {
-  // Notify all directors
-  const { data: directors } = await supabase.from('user_profiles').select('user_id').eq('role', 'director');
+async function createNotification(userId: string, companyId: number, type: string, title: string, message: string, link?: string) {
+  const { data: directors } = await supabase.from('user_profiles').select('user_id').eq('role', 'director').eq('company_id', companyId);
   if (directors) {
     for (const d of directors) {
       if (d.user_id !== userId) {
@@ -52,7 +51,7 @@ async function createNotification(userId: string, type: string, title: string, m
 }
 
 // ============================================================
-// AUTH MIDDLEWARE — validates JWT + attaches profile/role
+// AUTH MIDDLEWARE — validates JWT + attaches profile/role/company
 // ============================================================
 const authMiddleware = async (req: any, res: any, next: any) => {
   const authHeader = req.headers.authorization;
@@ -68,22 +67,38 @@ const authMiddleware = async (req: any, res: any, next: any) => {
     }
     req.user = user;
 
-    // Auto-create profile if not exists
+    // Get or create profile
     let { data: profile } = await supabase.from('user_profiles').select('*').eq('user_id', user.id).single();
     
     if (!profile) {
+      // Check if first user ever (becomes owner/director)
       const { count } = await supabase.from('user_profiles').select('*', { count: 'exact', head: true });
       const isFirst = (count || 0) === 0;
+      
+      let companyId: number | null = null;
+      
+      if (isFirst) {
+        // Create default company for first user
+        const { data: company } = await supabase.from('companies').insert({
+          name: 'Моя компания',
+          owner_id: user.id
+        }).select().single();
+        companyId = company?.id || null;
+      }
+      
       const { data: newProfile } = await supabase.from('user_profiles').insert({
         user_id: user.id,
         email: user.email,
         full_name: user.user_metadata?.full_name || '',
-        role: isFirst ? 'director' : 'foreman',
-        is_owner: isFirst
+        role: isFirst ? 'director' : 'viewer',
+        is_owner: isFirst,
+        company_id: companyId
       }).select().single();
       profile = newProfile;
     }
+    
     req.profile = profile;
+    req.companyId = profile?.company_id || null;
     next();
   } catch (e) {
     return res.status(401).json({ error: 'Ошибка авторизации' });
@@ -352,14 +367,16 @@ async function startServer() {
 
   // ---- Projects ----
   app.get("/api/projects", authMiddleware, async (req: any, res) => {
-    const { data, error } = await supabase.from('projects').select('*').order('created_at', { ascending: false });
+    if (!req.companyId) return res.json([]);
+    const { data, error } = await supabase.from('projects').select('*').eq('company_id', req.companyId).order('created_at', { ascending: false });
     if (error) return res.status(500).json({ error: error.message });
     res.json(data || []);
   });
 
   app.post("/api/projects", authMiddleware, async (req: any, res) => {
+    if (!req.companyId) return res.status(400).json({ error: 'Сначала создайте или присоединитесь к компании' });
     const { name, address } = req.body;
-    const { data, error } = await supabase.from('projects').insert({ name, address }).select().single();
+    const { data, error } = await supabase.from('projects').insert({ name, address, company_id: req.companyId }).select().single();
     if (error) return res.status(500).json({ error: error.message });
     res.json(data);
   });
@@ -381,7 +398,7 @@ async function startServer() {
       quantity: quantity || 1, unit: unit || 'шт'
     }).select().single();
     if (error) return res.status(500).json({ error: error.message });
-    await createNotification(req.user.id, 'new_request', 'Новая заявка', `Создана заявка: "${title}" (${quantity || 1} ${unit || 'шт'})`);
+    await createNotification(req.user.id, req.companyId, 'new_request', 'Новая заявка', `Создана заявка: "${title}" (${quantity || 1} ${unit || 'шт'})`);
     res.json(data);
   });
 
@@ -395,7 +412,7 @@ async function startServer() {
       approved: '✅ Одобрена', procurement: '🛒 В закупке', payment_pending: '💰 Ожидает оплаты',
       purchased: '📦 Закуплено', delivered: '✅ Доставлено', rejected: '❌ Отклонена'
     };
-    await createNotification(request?.foreman_id || req.user.id, 'status_change', 'Статус заявки', `${statusLabels[status] || status}: "${request?.title}"`);
+    await createNotification(request?.foreman_id || req.user.id, req.companyId, 'status_change', 'Статус заявки', `${statusLabels[status] || status}: "${request?.title}"`);
     res.json({ success: true });
   });
 
@@ -447,35 +464,36 @@ async function startServer() {
 
   // ---- Inventory ----
   app.get("/api/inventory", authMiddleware, async (req: any, res) => {
-    const { data, error } = await supabase.from('inventory').select('*');
+    if (!req.companyId) return res.json([]);
+    const { data, error } = await supabase.from('inventory').select('*').eq('company_id', req.companyId);
     if (error) return res.status(500).json({ error: error.message });
     res.json(data || []);
   });
 
   app.post("/api/inventory/update", authMiddleware, async (req: any, res) => {
     const { item_name, quantity, unit } = req.body;
-    // Try upsert
-    const { data: existing } = await supabase.from('inventory').select('*').eq('item_name', item_name).single();
+    const { data: existing } = await supabase.from('inventory').select('*').eq('item_name', item_name).eq('company_id', req.companyId).single();
     if (existing) {
-      await supabase.from('inventory').update({ quantity: existing.quantity + quantity }).eq('item_name', item_name);
+      await supabase.from('inventory').update({ quantity: existing.quantity + quantity }).eq('item_name', item_name).eq('company_id', req.companyId);
     } else {
-      await supabase.from('inventory').insert({ item_name, quantity, unit });
+      await supabase.from('inventory').insert({ item_name, quantity, unit, company_id: req.companyId });
     }
     res.json({ success: true });
   });
 
   // ---- Transactions ----
   app.get("/api/transactions", authMiddleware, async (req: any, res) => {
-    const { data, error } = await supabase.from('transactions').select('*').order('created_at', { ascending: false });
+    if (!req.companyId) return res.json([]);
+    const { data, error } = await supabase.from('transactions').select('*').eq('company_id', req.companyId).order('created_at', { ascending: false });
     if (error) return res.status(500).json({ error: error.message });
     res.json(data || []);
   });
 
   app.post("/api/transactions", authMiddleware, async (req: any, res) => {
     const { type, amount, description } = req.body;
-    const { data, error } = await supabase.from('transactions').insert({ type, amount, description }).select().single();
+    const { data, error } = await supabase.from('transactions').insert({ type, amount, description, company_id: req.companyId }).select().single();
     if (error) return res.status(500).json({ error: error.message });
-    await createNotification(req.user.id, 'transaction', 'Новая транзакция', `${type === 'expense' ? 'Расход' : 'Доход'}: ${amount} сом — ${description}`);
+    await createNotification(req.user.id, req.companyId, 'transaction', 'Новая транзакция', `${type === 'expense' ? 'Расход' : 'Доход'}: ${amount} сом — ${description}`);
     res.json(data);
   });
 
@@ -493,16 +511,61 @@ async function startServer() {
     res.json(data);
   });
 
+  // ---- Company Management ----
+  app.get("/api/company", authMiddleware, async (req: any, res) => {
+    if (!req.companyId) return res.json(null);
+    const { data } = await supabase.from('companies').select('*').eq('id', req.companyId).single();
+    res.json(data);
+  });
+
+  app.post("/api/company/create", authMiddleware, async (req: any, res) => {
+    const { name } = req.body;
+    if (!name) return res.status(400).json({ error: 'Укажите название компании' });
+    
+    const { data: company, error } = await supabase.from('companies').insert({
+      name,
+      owner_id: req.user.id
+    }).select().single();
+    if (error) return res.status(500).json({ error: error.message });
+
+    // Update user profile
+    await supabase.from('user_profiles').update({
+      company_id: company.id,
+      role: 'director',
+      is_owner: true
+    }).eq('user_id', req.user.id);
+
+    const { data: profile } = await supabase.from('user_profiles').select('*').eq('user_id', req.user.id).single();
+    res.json({ company, profile });
+  });
+
+  app.post("/api/company/join", authMiddleware, async (req: any, res) => {
+    const { invite_code } = req.body;
+    if (!invite_code) return res.status(400).json({ error: 'Укажите код приглашения' });
+
+    const { data: company } = await supabase.from('companies').select('*').eq('invite_code', invite_code).single();
+    if (!company) return res.status(404).json({ error: 'Компания не найдена. Проверьте код.' });
+
+    await supabase.from('user_profiles').update({
+      company_id: company.id,
+      role: 'foreman'
+    }).eq('user_id', req.user.id);
+
+    const { data: profile } = await supabase.from('user_profiles').select('*').eq('user_id', req.user.id).single();
+    res.json({ company, profile });
+  });
+
   // ---- Team Management (Director only) ----
   app.get("/api/team", authMiddleware, requireRole('director'), async (req: any, res) => {
-    const { data, error } = await supabase.from('user_profiles').select('*').order('created_at', { ascending: true });
+    if (!req.companyId) return res.json([]);
+    const { data, error } = await supabase.from('user_profiles').select('*').eq('company_id', req.companyId).order('created_at', { ascending: true });
     if (error) return res.status(500).json({ error: error.message });
     res.json(data || []);
   });
 
   app.patch("/api/team/:userId", authMiddleware, requireRole('director'), async (req: any, res) => {
     const { role, project_ids } = req.body;
-    const { data: target } = await supabase.from('user_profiles').select('*').eq('user_id', req.params.userId).single();
+    const { data: target } = await supabase.from('user_profiles').select('*').eq('user_id', req.params.userId).eq('company_id', req.companyId).single();
     if (!target) return res.status(404).json({ error: 'Пользователь не найден' });
     if (target.is_owner && role !== 'director') {
       return res.status(403).json({ error: 'Нельзя изменить роль владельца' });
@@ -512,16 +575,15 @@ async function startServer() {
     if (project_ids) updateData.project_ids = project_ids;
     await supabase.from('user_profiles').update(updateData).eq('user_id', req.params.userId);
     const { data: updated } = await supabase.from('user_profiles').select('*').eq('user_id', req.params.userId).single();
-    await createNotification(req.params.userId, 'role_change', 'Роль изменена', `Ваша роль изменена на: ${role}`);
+    await createNotification(req.params.userId, req.companyId, 'role_change', 'Роль изменена', `Ваша роль изменена на: ${role}`);
     res.json(updated);
   });
 
   app.delete("/api/team/:userId", authMiddleware, requireRole('director'), async (req: any, res) => {
-    const { data: target } = await supabase.from('user_profiles').select('*').eq('user_id', req.params.userId).single();
+    const { data: target } = await supabase.from('user_profiles').select('*').eq('user_id', req.params.userId).eq('company_id', req.companyId).single();
     if (!target) return res.status(404).json({ error: 'Пользователь не найден' });
     if (target.is_owner) return res.status(403).json({ error: 'Нельзя удалить владельца' });
-    await supabase.from('user_profiles').delete().eq('user_id', req.params.userId);
-    await supabase.from('notifications').delete().eq('user_id', req.params.userId);
+    await supabase.from('user_profiles').update({ company_id: null, role: 'viewer' }).eq('user_id', req.params.userId);
     res.json({ success: true });
   });
 

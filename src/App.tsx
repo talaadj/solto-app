@@ -49,6 +49,7 @@ interface UserProfile {
   role: string;
   project_ids: string;
   is_owner: number;
+  company_id: number | null;
 }
 
 // --- Main App Content (authenticated) ---
@@ -65,6 +66,10 @@ function AppContent() {
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectAddress, setNewProjectAddress] = useState('');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [companySetup, setCompanySetup] = useState<'none' | 'create' | 'join'>('none');
+  const [companyName, setCompanyName] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
+  const [companyError, setCompanyError] = useState('');
 
   // Load profile on mount
   useEffect(() => {
@@ -241,6 +246,110 @@ function AppContent() {
     );
   }
 
+  // Company Setup Screen — shown when user has no company
+  if (!profile?.company_id) {
+    const handleCreateCompany = async () => {
+      if (!companyName.trim()) return;
+      setCompanyError('');
+      try {
+        const result = await api.createCompany(companyName.trim());
+        if (result.error) { setCompanyError(result.error); return; }
+        setProfile(result.profile);
+        setActiveView(result.profile.role || 'director');
+        fetchData();
+      } catch (e: any) { setCompanyError(e.message || 'Ошибка'); }
+    };
+
+    const handleJoinCompany = async () => {
+      if (!inviteCode.trim()) return;
+      setCompanyError('');
+      try {
+        const result = await api.joinCompany(inviteCode.trim());
+        if (result.error) { setCompanyError(result.error); return; }
+        setProfile(result.profile);
+        setActiveView(result.profile.role || 'foreman');
+        fetchData();
+      } catch (e: any) { setCompanyError(e.message || 'Ошибка'); }
+    };
+
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-white flex items-center justify-center p-4">
+        <div className="w-full max-w-md">
+          <div className="text-center mb-8">
+            <div className="w-16 h-16 bg-black rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <LayoutDashboard className="text-white w-8 h-8" />
+            </div>
+            <h1 className="text-2xl font-bold text-gray-900">SOLTO</h1>
+            <p className="text-gray-500 mt-1">Настройка компании</p>
+          </div>
+
+          {companySetup === 'none' && (
+            <div className="space-y-3">
+              <button
+                onClick={() => setCompanySetup('create')}
+                className="w-full p-4 bg-indigo-600 text-white rounded-2xl font-bold text-base hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2"
+              >
+                <Plus size={20} /> Создать компанию
+              </button>
+              <button
+                onClick={() => setCompanySetup('join')}
+                className="w-full p-4 bg-white border-2 border-gray-200 text-gray-700 rounded-2xl font-bold text-base hover:border-indigo-300 transition-colors flex items-center justify-center gap-2"
+              >
+                <Users size={20} /> Присоединиться по коду
+              </button>
+              <button onClick={signOut} className="w-full p-3 text-gray-400 text-sm hover:text-gray-600 transition-colors">
+                Выйти
+              </button>
+            </div>
+          )}
+
+          {companySetup === 'create' && (
+            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+              <h2 className="font-bold text-lg mb-4">Новая компания</h2>
+              <input
+                type="text"
+                placeholder="Название компании"
+                value={companyName}
+                onChange={e => setCompanyName(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                autoFocus
+              />
+              {companyError && <p className="text-red-500 text-xs mb-3">{companyError}</p>}
+              <button onClick={handleCreateCompany} className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-colors mb-2">
+                Создать
+              </button>
+              <button onClick={() => { setCompanySetup('none'); setCompanyError(''); }} className="w-full py-2 text-gray-500 text-sm">
+                ← Назад
+              </button>
+            </div>
+          )}
+
+          {companySetup === 'join' && (
+            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+              <h2 className="font-bold text-lg mb-4">Присоединиться</h2>
+              <p className="text-gray-500 text-sm mb-3">Попросите директора дать вам код приглашения компании</p>
+              <input
+                type="text"
+                placeholder="Код приглашения (8 символов)"
+                value={inviteCode}
+                onChange={e => setInviteCode(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm mb-3 font-mono text-center text-lg tracking-widest focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                maxLength={8}
+                autoFocus
+              />
+              {companyError && <p className="text-red-500 text-xs mb-3">{companyError}</p>}
+              <button onClick={handleJoinCompany} className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-colors mb-2">
+                Присоединиться
+              </button>
+              <button onClick={() => { setCompanySetup('none'); setCompanyError(''); }} className="w-full py-2 text-gray-500 text-sm">
+                ← Назад
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#F8F9FA] text-gray-900 font-sans overflow-x-hidden">

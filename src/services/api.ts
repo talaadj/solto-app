@@ -193,4 +193,17 @@ export const api = {
     fetchWithAuth(`/api/schedule/${id}`, { method: 'PATCH', body: JSON.stringify(data) }).then(r => r.json()),
   deleteScheduleTask: (id: number) =>
     fetchWithAuth(`/api/schedule/${id}`, { method: 'DELETE' }).then(r => r.json()),
+
+  // Company
+  getCompany: async () => {
+    try {
+      const res = await fetchWithAuth('/api/company');
+      if (!res.ok) return null;
+      return await res.json();
+    } catch { return null; }
+  },
+  createCompany: (name: string) =>
+    fetchWithAuth('/api/company/create', { method: 'POST', body: JSON.stringify({ name }) }).then(r => r.json()),
+  joinCompany: (invite_code: string) =>
+    fetchWithAuth('/api/company/join', { method: 'POST', body: JSON.stringify({ invite_code }) }).then(r => r.json()),
 };
