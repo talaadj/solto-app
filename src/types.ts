@@ -10,6 +10,8 @@ export interface Request {
   project_id: number;
   title: string;
   description: string;
+  quantity: number;
+  unit: string;
   status: 'pending' | 'approved' | 'procurement' | 'payment_pending' | 'purchased' | 'delivered';
   foreman_id: string;
   created_at: string;
@@ -29,6 +31,10 @@ export interface ProcurementOffer {
   reliability_score?: number;
   risk_assessment?: string;
   status: 'pending' | 'approved';
+  approved_quantity?: number;
+  approved_amount?: number;
+  payment_method?: string;
+  payment_notes?: string;
 }
 
 export interface InventoryItem {

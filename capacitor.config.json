@@ -1,0 +1,18 @@
+{
+  "appId": "kg.solto.app",
+  "appName": "SOLTO",
+  "webDir": "dist",
+  "android": {
+    "allowMixedContent": true,
+    "backgroundColor": "#F8F9FA"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 2000,
+      "backgroundColor": "#F8F9FA",
+      "showSpinner": true,
+      "androidSpinnerStyle": "large",
+      "spinnerColor": "#6366f1"
+    }
+  }
+}
