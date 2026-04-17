@@ -1,7 +1,13 @@
 import { supabase } from './supabase';
 
-// Base URL for API calls — empty for local dev, set VITE_API_URL for mobile APK
-const API_BASE = import.meta.env.VITE_API_URL || '';
+// Smart API base URL:
+// - localhost/127.0.0.1 → same origin (dev server handles API)
+// - Capacitor (capacitor://, https://localhost on mobile) → Render cloud
+// - Everywhere else → use env variable or Render
+const isLocalDev = typeof window !== 'undefined' && 
+  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') &&
+  window.location.protocol === 'http:';
+const API_BASE = isLocalDev ? '' : (import.meta.env.VITE_API_URL || 'https://solto-app.onrender.com');
 
 // --- Auth-aware fetch helper ---
 
