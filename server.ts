@@ -1,6 +1,7 @@
 import dotenv from "dotenv";
-dotenv.config({ path: ".env.local" });
-dotenv.config({ path: ".env" });
+// In production (Render), env vars are set via dashboard. Don't override them.
+dotenv.config({ path: ".env.local", override: false });
+dotenv.config({ path: ".env", override: false });
 
 import express from "express";
 import { createServer as createViteServer } from "vite";
