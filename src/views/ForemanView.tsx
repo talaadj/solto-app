@@ -38,9 +38,15 @@ export const ForemanView = ({ requests, onNewRequest, currentProjectId }: { requ
   // Cache for AI search results to avoid repeated API calls
   const aiCacheRef = React.useRef<Record<string, {title: string, description: string}[]>>({});
   const abortRef = React.useRef<AbortController | null>(null);
+  const justSelectedRef = React.useRef(false);
 
   // Phase 1: INSTANT local search (0ms delay)
   useEffect(() => {
+    // Skip reopening suggestions if user just selected one
+    if (justSelectedRef.current) {
+      justSelectedRef.current = false;
+      return;
+    }
     if (title.length > 1) {
       const q = title.toLowerCase();
       const words = q.split(/\s+/).filter(w => w.length > 1);
@@ -136,6 +142,7 @@ export const ForemanView = ({ requests, onNewRequest, currentProjectId }: { requ
   };
 
   const useSuggestion = (suggestion: {title: string, description: string}) => {
+    justSelectedRef.current = true;
     setTitle(suggestion.title);
     setDescription(suggestion.description);
     setShowSuggestions(false);

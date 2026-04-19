@@ -404,12 +404,18 @@ async function startServer() {
   });
 
   app.post("/api/requests", authMiddleware, async (req: any, res) => {
-    const { project_id, title, description, foreman_id, quantity, unit } = req.body;
+    const { project_id, title, description, quantity, unit } = req.body;
+    if (!title) return res.status(400).json({ error: 'Название заявки обязательно' });
     const { data, error } = await supabase.from('requests').insert({
-      project_id, title, description, foreman_id,
-      quantity: quantity || 1, unit: unit || 'шт'
+      project_id, title, description, 
+      foreman_id: req.user.id,  // Use authenticated user, not client-provided value
+      quantity: quantity || 1, unit: unit || 'шт',
+      company_id: req.companyId || null
     }).select().single();
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) {
+      console.error('Request insert error:', error.message);
+      return res.status(500).json({ error: error.message });
+    }
     await createNotification(req.user.id, req.companyId, 'new_request', 'Новая заявка', `Создана заявка: "${title}" (${quantity || 1} ${unit || 'шт'})`);
     res.json(data);
   });

@@ -149,7 +149,7 @@ export const api = {
   createRequest: (projectId: number, title: string, description: string, quantity?: number, unit?: string) =>
     fetchWithAuth('/api/requests', {
       method: 'POST',
-      body: JSON.stringify({ project_id: projectId, title, description, foreman_id: 'foreman-1', quantity: quantity || 1, unit: unit || 'шт' }),
+      body: JSON.stringify({ project_id: projectId, title, description, quantity: quantity || 1, unit: unit || 'шт' }),
     }).then(r => r.json()),
   updateRequestStatus: (id: number, status: string) =>
     fetchWithAuth(`/api/requests/${id}`, {

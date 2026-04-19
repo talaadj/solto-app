@@ -8,7 +8,7 @@
   },
   "server": {
     "androidScheme": "https",
-    "allowNavigation": ["solto-app.onrender.com", "itknqtugqzgpntffyyiu.supabase.co"]
+    "allowNavigation": ["solto-app.onrender.com", "mtyyoikklghhbvzsbtuc.supabase.co"]
   },
   "plugins": {
     "SplashScreen": {
