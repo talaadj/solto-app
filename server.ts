@@ -408,9 +408,8 @@ async function startServer() {
     if (!title) return res.status(400).json({ error: 'Название заявки обязательно' });
     const { data, error } = await supabase.from('requests').insert({
       project_id, title, description, 
-      foreman_id: req.user.id,  // Use authenticated user, not client-provided value
-      quantity: quantity || 1, unit: unit || 'шт',
-      company_id: req.companyId || null
+      foreman_id: req.user.id,
+      quantity: quantity || 1, unit: unit || 'шт'
     }).select().single();
     if (error) {
       console.error('Request insert error:', error.message);
