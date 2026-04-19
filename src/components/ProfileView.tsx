@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { 
   User, Building2, Copy, Check, Edit3, Save, X, Share2, 
-  Shield, BookOpen, Mail, Phone, MapPin, ChevronRight, 
-  LogOut, HelpCircle, FileText, Key, Users
+  Shield, BookOpen, Mail, Phone, MapPin, ChevronRight, ChevronDown,
+  LogOut, HelpCircle, FileText, Key, Users, Zap, Search, 
+  Calculator, Package, ClipboardList, BarChart3, Calendar,
+  Bell, Smartphone, Globe, Lock, Sparkles, ArrowRight
 } from 'lucide-react';
 import { api } from '../services/api';
 import { useAuth } from '../hooks/useAuth';
@@ -56,6 +58,102 @@ function getInitials(name: string, email: string): string {
   return email ? email.charAt(0).toUpperCase() : '?';
 }
 
+// Documentation sections
+const DOC_SECTIONS = [
+  {
+    id: 'overview',
+    icon: Sparkles,
+    title: 'О платформе SOLTO',
+    color: 'from-indigo-500 to-violet-500',
+    content: `SOLTO — интеллектуальная платформа для управления строительными проектами. Объединяет все ключевые роли: от директора до кладовщика в единую экосистему с ИИ-агентами.`,
+    features: [
+      '🤖 5 ИИ-агентов для автоматизации рутины',
+      '📊 Реальный контроль финансов и складов',
+      '🔍 Поиск поставщиков через Google в реальном времени',
+      '📱 Работает на телефоне и компьютере',
+    ]
+  },
+  {
+    id: 'director',
+    icon: Shield,
+    title: 'Директор',
+    color: 'from-blue-500 to-indigo-600',
+    content: 'Полный контроль над всеми проектами, финансами и командой.',
+    features: [
+      '✅ Одобрение и отклонение заявок на материалы',
+      '💰 Утверждение оплаты с выбором поставщика',
+      '👥 Управление командой и ролями сотрудников',
+      '📈 Финансовая аналитика и отчёты',
+      '🏗️ Создание и управление проектами',
+    ]
+  },
+  {
+    id: 'foreman',
+    icon: ClipboardList,
+    title: 'Прораб',
+    color: 'from-orange-500 to-red-500',
+    content: 'Подача заявок с помощью ИИ-ассистента, который подбирает СНиПы и ГОСТы.',
+    features: [
+      '📝 Создание заявок на материалы с ТЗ',
+      '🤖 ИИ подсказывает СНиП и ГОСТ',
+      '📐 Автоматический расчёт количества',
+      '📋 Отслеживание статуса заявок',
+    ]
+  },
+  {
+    id: 'procurement',
+    icon: Search,
+    title: 'Снабженец',
+    color: 'from-amber-500 to-orange-500',
+    content: 'ИИ агент ищет реальных поставщиков через Google Search Grounding.',
+    features: [
+      '🌐 Live-поиск поставщиков в Google',
+      '📊 Сравнение цен от 5+ поставщиков',
+      '📞 Контакты, адреса, рейтинги',
+      '⚡ Оценка надёжности (1-100)',
+    ]
+  },
+  {
+    id: 'accountant',
+    icon: Calculator,
+    title: 'Бухгалтер',
+    color: 'from-green-500 to-emerald-600',
+    content: 'ИИ формирует проводки по НСБУ, рассчитывает НДС и ведёт главную книгу.',
+    features: [
+      '📊 Автоматические проводки (Дт/Кт)',
+      '🧾 Расчёт НДС (12%), НДФЛ (10%)',
+      '📈 Баланс в реальном времени',
+      '📥 Экспорт в CSV для 1С',
+    ]
+  },
+  {
+    id: 'storekeeper',
+    icon: Package,
+    title: 'Кладовщик',
+    color: 'from-teal-500 to-cyan-600',
+    content: 'Управление складом: приём, выдача, остатки и отчёты.',
+    features: [
+      '📦 Приём товаров на склад',
+      '📤 Выдача — кому, когда, сколько',
+      '📊 Контроль остатков в реальном времени',
+      '📄 Акт выдачи ТМЦ (PDF отчёт)',
+    ]
+  },
+  {
+    id: 'invite',
+    icon: Users,
+    title: 'Как пригласить команду',
+    color: 'from-violet-500 to-purple-600',
+    content: 'Простой процесс подключения сотрудников за 4 шага.',
+    features: [
+      '1️⃣ Директор копирует код приглашения',
+      '2️⃣ Отправляет сотруднику (WhatsApp, Telegram)',
+      '3️⃣ Сотрудник скачивает SOLTO и регистрируется',
+      '4️⃣ Вводит код → попадает в команду',
+    ]
+  },
+];
+
 export default function ProfileView({ profile, onProfileUpdate }: ProfileViewProps) {
   const { user, signOut } = useAuth();
   const [company, setCompany] = useState<Company | null>(null);
@@ -63,10 +161,12 @@ export default function ProfileView({ profile, onProfileUpdate }: ProfileViewPro
   const [editName, setEditName] = useState(profile?.full_name || '');
   const [editCompanyName, setEditCompanyName] = useState('');
   const [editingCompany, setEditingCompany] = useState(false);
+  const [savingCompany, setSavingCompany] = useState(false);
   const [codeCopied, setCodeCopied] = useState(false);
   const [teamCount, setTeamCount] = useState(0);
   const [saving, setSaving] = useState(false);
   const [showDocs, setShowDocs] = useState(false);
+  const [expandedDoc, setExpandedDoc] = useState<string | null>(null);
 
   useEffect(() => {
     loadCompany();
@@ -101,12 +201,31 @@ export default function ProfileView({ profile, onProfileUpdate }: ProfileViewPro
     setSaving(false);
   };
 
+  const handleSaveCompanyName = async () => {
+    if (!editCompanyName.trim() || !company) return;
+    setSavingCompany(true);
+    try {
+      const updated = await api.updateCompany(editCompanyName.trim());
+      if (updated && !updated.error) {
+        setCompany({ ...company, name: editCompanyName.trim() });
+        setEditingCompany(false);
+      } else {
+        alert(updated?.error || 'Ошибка при обновлении');
+      }
+    } catch (e: any) {
+      alert(e.message || 'Ошибка при обновлении');
+    }
+    setSavingCompany(false);
+  };
+
   const handleCopyCode = () => {
     if (!company?.invite_code) return;
     navigator.clipboard.writeText(company.invite_code).catch(() => {
       // Fallback for mobile
       const ta = document.createElement('textarea');
       ta.value = company.invite_code;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
       document.body.appendChild(ta);
       ta.select();
       document.execCommand('copy');
@@ -120,13 +239,16 @@ export default function ProfileView({ profile, onProfileUpdate }: ProfileViewPro
     if (!company) return;
     const text = `Присоединяйся к компании "${company.name}" в SOLTO!\n\nКод приглашения: ${company.invite_code}\n\n1. Скачай приложение SOLTO\n2. Зарегистрируйся\n3. Нажми "Присоединиться по коду"\n4. Введи код: ${company.invite_code}`;
     
-    if (navigator.share) {
-      try {
+    try {
+      if (navigator.share) {
         await navigator.share({ title: 'SOLTO — Код приглашения', text });
-      } catch { /* cancelled */ }
-    } else {
-      handleCopyCode();
-    }
+        return;
+      }
+    } catch { /* share cancelled or unsupported */ }
+    
+    // Fallback: copy to clipboard
+    handleCopyCode();
+    alert(`Код скопирован: ${company.invite_code}\n\nОтправьте его сотрудникам через WhatsApp или Telegram.`);
   };
 
   const initials = getInitials(profile?.full_name || '', user?.email || '');
@@ -198,7 +320,7 @@ export default function ProfileView({ profile, onProfileUpdate }: ProfileViewPro
               <h3 className="font-bold text-gray-900">Компания</h3>
             </div>
             {isOwner && !editingCompany && (
-              <button onClick={() => setEditingCompany(true)} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
+              <button onClick={() => { setEditingCompany(true); setEditCompanyName(company.name); }} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
                 <Edit3 size={14} className="text-gray-400" />
               </button>
             )}
@@ -214,9 +336,18 @@ export default function ProfileView({ profile, onProfileUpdate }: ProfileViewPro
                 onChange={e => setEditCompanyName(e.target.value)}
                 className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 autoFocus
+                placeholder="Название компании"
               />
-              <button onClick={() => setEditingCompany(false)} className="p-1.5 bg-indigo-600 text-white rounded-lg"><Save size={14} /></button>
-              <button onClick={() => { setEditingCompany(false); setEditCompanyName(company.name); }} className="p-1.5 bg-gray-100 rounded-lg"><X size={14} /></button>
+              <button 
+                onClick={handleSaveCompanyName} 
+                disabled={savingCompany || !editCompanyName.trim()}
+                className="p-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50"
+              >
+                {savingCompany ? <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Save size={14} />}
+              </button>
+              <button onClick={() => { setEditingCompany(false); setEditCompanyName(company.name); }} className="p-1.5 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
+                <X size={14} />
+              </button>
             </div>
           )}
 
@@ -239,12 +370,14 @@ export default function ProfileView({ profile, onProfileUpdate }: ProfileViewPro
                 <button 
                   onClick={handleCopyCode}
                   className={`p-2 rounded-lg transition-all ${codeCopied ? 'bg-green-100 text-green-600' : 'bg-white text-gray-500 hover:bg-gray-100'} border border-gray-200`}
+                  title="Копировать код"
                 >
                   {codeCopied ? <Check size={16} /> : <Copy size={16} />}
                 </button>
                 <button 
                   onClick={handleShareCode}
                   className="p-2 bg-white text-gray-500 hover:bg-gray-100 rounded-lg border border-gray-200 transition-colors"
+                  title="Поделиться кодом"
                 >
                   <Share2 size={16} />
                 </button>
@@ -257,50 +390,68 @@ export default function ProfileView({ profile, onProfileUpdate }: ProfileViewPro
         </div>
       )}
 
-      {/* Quick Actions */}
+      {/* Documentation — Premium */}
       <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
         <button 
           onClick={() => setShowDocs(!showDocs)}
           className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
         >
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-blue-50 rounded-xl flex items-center justify-center">
-              <BookOpen size={18} className="text-blue-600" />
+            <div className="w-9 h-9 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-sm">
+              <BookOpen size={18} className="text-white" />
             </div>
             <div className="text-left">
               <p className="text-sm font-bold text-gray-800">Документация</p>
-              <p className="text-[10px] text-gray-400">Как пользоваться приложением</p>
+              <p className="text-[10px] text-gray-400">Руководство по всем разделам</p>
             </div>
           </div>
-          <ChevronRight size={16} className={`text-gray-300 transition-transform ${showDocs ? 'rotate-90' : ''}`} />
+          <ChevronRight size={16} className={`text-gray-300 transition-transform duration-300 ${showDocs ? 'rotate-90' : ''}`} />
         </button>
 
         {showDocs && (
           <div className="px-4 pb-4 border-t border-gray-100">
-            <div className="mt-3 space-y-3 text-xs text-gray-600">
-              <div className="p-3 bg-gray-50 rounded-xl">
-                <h4 className="font-bold text-gray-800 mb-1">🏗️ Директор</h4>
-                <p>Управление объектами, одобрение заявок, контроль финансов, управление командой</p>
-              </div>
-              <div className="p-3 bg-gray-50 rounded-xl">
-                <h4 className="font-bold text-gray-800 mb-1">👷 Прораб</h4>
-                <p>Создание заявок на материалы с указанием количества и единиц измерения</p>
-              </div>
-              <div className="p-3 bg-gray-50 rounded-xl">
-                <h4 className="font-bold text-gray-800 mb-1">🛒 Снабженец</h4>
-                <p>ИИ поиск поставщиков, сравнение цен, формирование предложений</p>
-              </div>
-              <div className="p-3 bg-gray-50 rounded-xl">
-                <h4 className="font-bold text-gray-800 mb-1">💰 Бухгалтер</h4>
-                <p>Проведение оплат, учёт расходов и доходов, финансовые отчёты</p>
-              </div>
-              <div className="p-3 bg-gray-50 rounded-xl">
-                <h4 className="font-bold text-gray-800 mb-1">📦 Кладовщик</h4>
-                <p>Учёт материалов на складе, приём и выдача</p>
-              </div>
-              <div className="p-3 bg-gray-50 rounded-xl">
-                <h4 className="font-bold text-gray-800 mb-1">👥 Приглашение команды</h4>
-                <p>Директор отправляет код приглашения → сотрудник скачивает SOLTO → вводит код → попадает в команду</p>
+            <div className="mt-3 space-y-2">
+              {DOC_SECTIONS.map((section) => {
+                const Icon = section.icon;
+                const isExpanded = expandedDoc === section.id;
+                return (
+                  <div key={section.id} className="overflow-hidden rounded-2xl border border-gray-100">
+                    <button
+                      onClick={() => setExpandedDoc(isExpanded ? null : section.id)}
+                      className="w-full p-3 flex items-center gap-3 hover:bg-gray-50 transition-colors"
+                    >
+                      <div className={`w-8 h-8 bg-gradient-to-br ${section.color} rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm`}>
+                        <Icon size={14} className="text-white" />
+                      </div>
+                      <span className="text-sm font-bold text-gray-800 flex-1 text-left">{section.title}</span>
+                      <ChevronDown size={14} className={`text-gray-300 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+                    </button>
+                    {isExpanded && (
+                      <div className="px-3 pb-3 border-t border-gray-50">
+                        <p className="text-xs text-gray-500 mt-2 mb-3 leading-relaxed">{section.content}</p>
+                        <div className="space-y-1.5">
+                          {section.features.map((feature, i) => (
+                            <div key={i} className="flex items-start gap-2 text-xs text-gray-600 bg-gray-50 rounded-lg p-2">
+                              <span className="leading-relaxed">{feature}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Tech Stack */}
+            <div className="mt-4 p-3 bg-gradient-to-r from-gray-900 to-gray-800 rounded-2xl">
+              <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-2">Технологии</p>
+              <div className="flex flex-wrap gap-1.5">
+                {['React', 'TypeScript', 'Gemini AI', 'Google Search', 'Supabase', 'Capacitor'].map(tech => (
+                  <span key={tech} className="text-[10px] px-2 py-1 bg-white/10 text-gray-300 rounded-md font-mono">
+                    {tech}
+                  </span>
+                ))}
               </div>
             </div>
           </div>
@@ -311,11 +462,11 @@ export default function ProfileView({ profile, onProfileUpdate }: ProfileViewPro
         <button className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 bg-gray-100 rounded-xl flex items-center justify-center">
-              <FileText size={18} className="text-gray-500" />
+              <Smartphone size={18} className="text-gray-500" />
             </div>
             <div className="text-left">
               <p className="text-sm font-bold text-gray-800">Версия</p>
-              <p className="text-[10px] text-gray-400">SOLTO v2.0.0</p>
+              <p className="text-[10px] text-gray-400">SOLTO v2.1.0 • Build 2026.04.19</p>
             </div>
           </div>
         </button>

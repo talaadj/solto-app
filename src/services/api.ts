@@ -271,6 +271,10 @@ export const api = {
       return await res.json();
     } catch { return null; }
   },
+  updateCompany: async (name: string) => {
+    const res = await fetchWithAuth('/api/company', { method: 'PATCH', body: JSON.stringify({ name }) });
+    return await res.json();
+  },
   createCompany: (name: string) =>
     fetchWithAuth('/api/company/create', { method: 'POST', body: JSON.stringify({ name }) }).then(r => r.json()),
   joinCompany: (invite_code: string) =>

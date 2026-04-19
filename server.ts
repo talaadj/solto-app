@@ -636,6 +636,22 @@ async function startServer() {
     res.json(data);
   });
 
+  // Update company name (owner only)
+  app.patch("/api/company", authMiddleware, async (req: any, res) => {
+    if (!req.companyId) return res.status(400).json({ error: 'Нет компании' });
+    const { name } = req.body;
+    if (!name || !name.trim()) return res.status(400).json({ error: 'Укажите название' });
+
+    // Check owner
+    const { data: company } = await supabase.from('companies').select('*').eq('id', req.companyId).single();
+    if (!company) return res.status(404).json({ error: 'Компания не найдена' });
+    if (company.owner_id !== req.user.id) return res.status(403).json({ error: 'Только владелец может переименовать компанию' });
+
+    const { data: updated, error } = await supabase.from('companies').update({ name: name.trim() }).eq('id', req.companyId).select().single();
+    if (error) return res.status(500).json({ error: error.message });
+    res.json(updated);
+  });
+
   app.post("/api/company/create", authMiddleware, async (req: any, res) => {
     const { name } = req.body;
     if (!name) return res.status(400).json({ error: 'Укажите название компании' });
