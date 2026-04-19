@@ -13,44 +13,66 @@ const API_BASE = isLocalDev ? '' : (import.meta.env.VITE_API_URL || 'https://sol
 
 async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
   // Get fresh session (auto-refreshes expired tokens)
-  let { data: { session } } = await supabase.auth.getSession();
+  let session: any = null;
+  try {
+    const { data } = await supabase.auth.getSession();
+    session = data.session;
+  } catch (e: any) {
+    console.warn('getSession failed:', e.message);
+  }
   
   // If no session or token looks expired, force refresh
   if (!session?.access_token) {
-    const { data } = await supabase.auth.refreshSession();
-    session = data.session;
+    try {
+      const { data } = await supabase.auth.refreshSession();
+      session = data.session;
+    } catch (e: any) {
+      console.warn('refreshSession failed:', e.message);
+    }
+  }
+
+  // If still no session, redirect to login
+  if (!session?.access_token) {
+    console.warn('⚠️ No valid session — redirecting to login');
+    await supabase.auth.signOut().catch(() => {});
+    window.location.href = '/';
+    throw new Error('Требуется авторизация');
   }
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string> || {}),
   };
-  if (session?.access_token) {
-    headers['Authorization'] = `Bearer ${session.access_token}`;
-  }
+  headers['Authorization'] = `Bearer ${session.access_token}`;
   
-  // Add timeout for Render cold starts (up to 60s)
+  // Longer timeout for AI endpoints (Gemini + Google Search can take time)
+  const isAI = url.includes('/api/ai/');
+  const timeoutMs = isAI ? 120000 : 60000;
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 60000);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   
   try {
     let res = await fetch(API_BASE + url, { ...options, headers, signal: controller.signal });
     
     // If 401, try refreshing token once and retry
-    if (res.status === 401 && session) {
-      const { data } = await supabase.auth.refreshSession();
-      if (data.session?.access_token) {
-        headers['Authorization'] = `Bearer ${data.session.access_token}`;
-        const controller2 = new AbortController();
-        const timeout2 = setTimeout(() => controller2.abort(), 60000);
-        res = await fetch(API_BASE + url, { ...options, headers, signal: controller2.signal });
-        clearTimeout(timeout2);
-      } else {
-        // Stale token from a different Supabase project — force sign out
-        console.warn('⚠️ Token refresh failed — forcing sign out (stale session)');
-        await supabase.auth.signOut();
+    if (res.status === 401) {
+      try {
+        const { data } = await supabase.auth.refreshSession();
+        if (data.session?.access_token) {
+          headers['Authorization'] = `Bearer ${data.session.access_token}`;
+          const controller2 = new AbortController();
+          const timeout2 = setTimeout(() => controller2.abort(), timeoutMs);
+          res = await fetch(API_BASE + url, { ...options, headers, signal: controller2.signal });
+          clearTimeout(timeout2);
+        } else {
+          await supabase.auth.signOut().catch(() => {});
+          window.location.href = '/';
+          throw new Error('Сессия истекла — войдите снова');
+        }
+      } catch (refreshErr: any) {
+        await supabase.auth.signOut().catch(() => {});
         window.location.href = '/';
-        throw new Error('Session expired — please sign in again');
+        throw new Error('Сессия истекла — войдите снова');
       }
     }
     
@@ -58,6 +80,9 @@ async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Re
     return res;
   } catch (e: any) {
     clearTimeout(timeout);
+    if (e.name === 'AbortError') {
+      throw new Error(isAI ? 'ИИ не ответил вовремя (таймаут 2 мин). Попробуйте ещё раз.' : 'Сервер не ответил вовремя. Попробуйте ещё раз.');
+    }
     throw e;
   }
 }
@@ -104,7 +129,9 @@ export const procurementAgent = async (requestTitle: string, requestDescription:
     method: 'POST',
     body: JSON.stringify({ requestTitle, requestDescription, projectAddress }),
   });
-  return jsonObj(res);
+  const data = await jsonObj(res);
+  // Server returns {offers: [...]} - extract the array
+  return Array.isArray(data?.offers) ? data.offers : (Array.isArray(data) ? data : []);
 };
 
 export const accountantAgent = async (action: string, amount: number, description: string) => {
