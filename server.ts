@@ -24,6 +24,11 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.error("❌ SUPABASE_URL и SUPABASE_ANON_KEY обязательны! Добавьте в .env.local");
   process.exit(1);
 }
+if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  console.error("⚠️ SUPABASE_SERVICE_ROLE_KEY не установлен! Используется anon key — RLS НЕ будет обходиться!");
+} else {
+  console.log("✅ Service Role Key загружен");
+}
 console.log("✅ Supabase подключен:", supabaseUrl);
 
 // Gemini AI Client (Server-side only — key never exposed to client)
