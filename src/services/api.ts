@@ -279,4 +279,43 @@ export const api = {
     fetchWithAuth('/api/company/create', { method: 'POST', body: JSON.stringify({ name }) }).then(r => r.json()),
   joinCompany: (invite_code: string) =>
     fetchWithAuth('/api/company/join', { method: 'POST', body: JSON.stringify({ invite_code }) }).then(r => r.json()),
+
+  // Workers
+  getWorkers: (projectId?: number) =>
+    fetchWithAuth(`/api/workers${projectId ? `?project_id=${projectId}` : ''}`).then(jsonArray),
+  createWorker: (data: any) =>
+    fetchWithAuth('/api/workers', { method: 'POST', body: JSON.stringify(data) }).then(r => r.json()),
+  updateWorker: (id: number, data: any) =>
+    fetchWithAuth(`/api/workers/${id}`, { method: 'PATCH', body: JSON.stringify(data) }).then(r => r.json()),
+  deleteWorker: (id: number) =>
+    fetchWithAuth(`/api/workers/${id}`, { method: 'DELETE' }).then(r => r.json()),
+
+  // Geofences
+  getGeofences: (projectId?: number) =>
+    fetchWithAuth(`/api/geofences${projectId ? `?project_id=${projectId}` : ''}`).then(jsonArray),
+  createGeofence: (data: any) =>
+    fetchWithAuth('/api/geofences', { method: 'POST', body: JSON.stringify(data) }).then(r => r.json()),
+  updateGeofence: (id: number, data: any) =>
+    fetchWithAuth(`/api/geofences/${id}`, { method: 'PATCH', body: JSON.stringify(data) }).then(r => r.json()),
+  deleteGeofence: (id: number) =>
+    fetchWithAuth(`/api/geofences/${id}`, { method: 'DELETE' }).then(r => r.json()),
+
+  // GPS
+  logGps: (worker_id: number, lat: number, lng: number) =>
+    fetchWithAuth('/api/gps/log', { method: 'POST', body: JSON.stringify({ worker_id, lat, lng }) }).then(r => r.json()),
+  getLatestGps: () =>
+    fetchWithAuth('/api/gps/latest').then(jsonArray),
+
+  // Attendance
+  getAttendance: (params?: { project_id?: number; date_from?: string; date_to?: string }) => {
+    const qs = new URLSearchParams();
+    if (params?.project_id) qs.set('project_id', String(params.project_id));
+    if (params?.date_from) qs.set('date_from', params.date_from);
+    if (params?.date_to) qs.set('date_to', params.date_to);
+    return fetchWithAuth(`/api/attendance?${qs.toString()}`).then(jsonArray);
+  },
+  checkin: (worker_id: number, project_id?: number) =>
+    fetchWithAuth('/api/attendance/checkin', { method: 'POST', body: JSON.stringify({ worker_id, project_id }) }).then(r => r.json()),
+  checkout: (worker_id: number) =>
+    fetchWithAuth('/api/attendance/checkout', { method: 'POST', body: JSON.stringify({ worker_id }) }).then(r => r.json()),
 };

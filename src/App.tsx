@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, HardHat, ShoppingBag, Calculator, Warehouse, 
-  UserCircle, Plus, X, Menu, LogOut, Users, CalendarDays, Shield
+  UserCircle, Plus, X, Menu, LogOut, Users, CalendarDays, Shield, MapPin
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { UserRole, Request, InventoryItem, Transaction, Project } from './types';
@@ -18,6 +18,8 @@ import { AccountantView } from './views/AccountantView';
 import { StorekeeperView } from './views/StorekeeperView';
 import { TeamManagementView } from './views/TeamManagementView';
 import { GanttView } from './views/GanttView';
+import { WorkforceView } from './views/WorkforceView';
+import { WorkerGpsView } from './views/WorkerGpsView';
 import ProfileView from './components/ProfileView';
 
 // Error Boundary to prevent view crashes from killing the app
@@ -207,9 +209,11 @@ function AppContent() {
       { id: 'procurement', label: 'Снабжение', icon: ShoppingBag, roles: ['director', 'procurement'] },
       { id: 'accountant', label: 'Бухгалтер', icon: Calculator, roles: ['director', 'accountant'] },
       { id: 'storekeeper', label: 'Склад', icon: Warehouse, roles: ['director', 'storekeeper'] },
+      { id: 'workforce', label: 'Работники', icon: MapPin, roles: ['director'] },
       { id: 'gantt', label: 'График', icon: CalendarDays, roles: ['director', 'foreman'] },
       { id: 'team', label: 'Команда', icon: Users, roles: ['director'] },
-      { id: 'profile', label: 'Профиль', icon: UserCircle, roles: ['director', 'foreman', 'procurement', 'accountant', 'storekeeper', 'viewer'] },
+      { id: 'worker-gps', label: 'GPS Смена', icon: MapPin, roles: ['worker'] },
+      { id: 'profile', label: 'Профиль', icon: UserCircle, roles: ['director', 'foreman', 'procurement', 'accountant', 'storekeeper', 'viewer', 'worker'] },
     ];
     return allItems.filter(item => item.roles.includes(role));
   };
@@ -223,6 +227,7 @@ function AppContent() {
     procurement: { label: 'Снабженец', badge: 'bg-blue-100 text-blue-700' },
     accountant: { label: 'Бухгалтер', badge: 'bg-green-100 text-green-700' },
     storekeeper: { label: 'Кладовщик', badge: 'bg-orange-100 text-orange-700' },
+    worker: { label: 'Рабочий', badge: 'bg-cyan-100 text-cyan-700' },
   };
 
   // Lock body scroll when mobile menu is open (MUST be before any early return)
@@ -547,6 +552,8 @@ function AppContent() {
               {activeView === 'storekeeper' && <StorekeeperView inventory={inventory} onAddItem={handleAddItem} onRefresh={async () => { const inv = await api.getInventory(); setInventory(inv); }} />}
               {activeView === 'team' && <TeamManagementView projects={projects} />}
               {activeView === 'gantt' && <GanttView projects={projects} selectedProject={currentProject} />}
+              {activeView === 'workforce' && <WorkforceView projects={projects} selectedProject={currentProject} />}
+              {activeView === 'worker-gps' && <WorkerGpsView workerId={null} />}
               {activeView === 'profile' && <ProfileView profile={profile!} onProfileUpdate={setProfile} />}
             </ViewErrorBoundary>
           </motion.div>

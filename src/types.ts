@@ -52,4 +52,54 @@ export interface Transaction {
   created_at: string;
 }
 
-export type UserRole = 'director' | 'foreman' | 'procurement' | 'accountant' | 'storekeeper';
+export type UserRole = 'director' | 'foreman' | 'procurement' | 'accountant' | 'storekeeper' | 'worker';
+
+export interface Worker {
+  id: number;
+  company_id: number;
+  project_id: number | null;
+  full_name: string;
+  phone: string;
+  position: string;
+  daily_rate: number;
+  work_start: string;
+  work_end: string;
+  status: 'active' | 'inactive';
+  user_id: string | null;
+  created_at: string;
+}
+
+export interface Geofence {
+  id: number;
+  project_id: number;
+  company_id: number;
+  center_lat: number;
+  center_lng: number;
+  radius_meters: number;
+  name: string;
+  created_at: string;
+}
+
+export interface GpsLog {
+  id: number;
+  worker_id: number;
+  lat: number;
+  lng: number;
+  in_zone: boolean;
+  logged_at: string;
+}
+
+export interface Attendance {
+  id: number;
+  worker_id: number;
+  project_id: number;
+  date: string;
+  check_in: string | null;
+  check_out: string | null;
+  hours_worked: number;
+  in_zone_percent: number;
+  status: 'present' | 'absent' | 'late';
+  created_at: string;
+  // joined
+  worker_name?: string;
+}

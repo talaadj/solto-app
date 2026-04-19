@@ -783,6 +783,243 @@ async function startServer() {
     res.json({ success: true });
   });
 
+  // ============================================================
+  // WORKFORCE / GPS TRACKING API
+  // ============================================================
+
+  // ---- Workers CRUD ----
+  app.get("/api/workers", authMiddleware, async (req: any, res) => {
+    if (!req.companyId) return res.json([]);
+    const projectId = req.query.project_id;
+    let query = supabase.from('workers').select('*').eq('company_id', req.companyId).order('created_at', { ascending: false });
+    if (projectId) query = query.eq('project_id', projectId);
+    const { data, error } = await query;
+    if (error) return res.status(500).json({ error: error.message });
+    res.json(data || []);
+  });
+
+  app.post("/api/workers", authMiddleware, async (req: any, res) => {
+    if (!req.companyId) return res.status(400).json({ error: 'Нет компании' });
+    const { full_name, phone, position, daily_rate, work_start, work_end, project_id } = req.body;
+    if (!full_name?.trim()) return res.status(400).json({ error: 'Укажите ФИО' });
+    const { data, error } = await supabase.from('workers').insert({
+      company_id: req.companyId,
+      project_id: project_id || null,
+      full_name: full_name.trim(),
+      phone: phone || '',
+      position: position || 'Разнорабочий',
+      daily_rate: daily_rate || 0,
+      work_start: work_start || '08:00',
+      work_end: work_end || '18:00',
+    }).select().single();
+    if (error) return res.status(500).json({ error: error.message });
+    res.json(data);
+  });
+
+  app.patch("/api/workers/:id", authMiddleware, async (req: any, res) => {
+    const { full_name, phone, position, daily_rate, work_start, work_end, status, project_id } = req.body;
+    const updateData: any = {};
+    if (full_name !== undefined) updateData.full_name = full_name;
+    if (phone !== undefined) updateData.phone = phone;
+    if (position !== undefined) updateData.position = position;
+    if (daily_rate !== undefined) updateData.daily_rate = daily_rate;
+    if (work_start !== undefined) updateData.work_start = work_start;
+    if (work_end !== undefined) updateData.work_end = work_end;
+    if (status !== undefined) updateData.status = status;
+    if (project_id !== undefined) updateData.project_id = project_id;
+    const { data, error } = await supabase.from('workers').update(updateData).eq('id', req.params.id).select().single();
+    if (error) return res.status(500).json({ error: error.message });
+    res.json(data);
+  });
+
+  app.delete("/api/workers/:id", authMiddleware, async (req: any, res) => {
+    await supabase.from('workers').delete().eq('id', req.params.id);
+    res.json({ success: true });
+  });
+
+  // ---- Geofences ----
+  app.get("/api/geofences", authMiddleware, async (req: any, res) => {
+    if (!req.companyId) return res.json([]);
+    const projectId = req.query.project_id;
+    let query = supabase.from('geofences').select('*').eq('company_id', req.companyId);
+    if (projectId) query = query.eq('project_id', projectId);
+    const { data } = await query;
+    res.json(data || []);
+  });
+
+  app.post("/api/geofences", authMiddleware, async (req: any, res) => {
+    if (!req.companyId) return res.status(400).json({ error: 'Нет компании' });
+    const { project_id, center_lat, center_lng, radius_meters, name } = req.body;
+    if (!center_lat || !center_lng) return res.status(400).json({ error: 'Укажите координаты' });
+    const { data, error } = await supabase.from('geofences').insert({
+      company_id: req.companyId,
+      project_id: project_id || null,
+      center_lat, center_lng,
+      radius_meters: radius_meters || 200,
+      name: name || 'Стройплощадка',
+    }).select().single();
+    if (error) return res.status(500).json({ error: error.message });
+    res.json(data);
+  });
+
+  app.patch("/api/geofences/:id", authMiddleware, async (req: any, res) => {
+    const { center_lat, center_lng, radius_meters, name } = req.body;
+    const updateData: any = {};
+    if (center_lat !== undefined) updateData.center_lat = center_lat;
+    if (center_lng !== undefined) updateData.center_lng = center_lng;
+    if (radius_meters !== undefined) updateData.radius_meters = radius_meters;
+    if (name !== undefined) updateData.name = name;
+    const { data } = await supabase.from('geofences').update(updateData).eq('id', req.params.id).select().single();
+    res.json(data);
+  });
+
+  app.delete("/api/geofences/:id", authMiddleware, async (req: any, res) => {
+    await supabase.from('geofences').delete().eq('id', req.params.id);
+    res.json({ success: true });
+  });
+
+  // ---- GPS Logging ----
+  // Helper: calculate distance between two points (Haversine)
+  function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+    const R = 6371000; // meters
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLng/2) * Math.sin(dLng/2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  }
+
+  app.post("/api/gps/log", authMiddleware, async (req: any, res) => {
+    const { worker_id, lat, lng } = req.body;
+    if (!worker_id || lat === undefined || lng === undefined) {
+      return res.status(400).json({ error: 'worker_id, lat, lng обязательны' });
+    }
+
+    // Check if worker is in any geofence
+    const { data: worker } = await supabase.from('workers').select('project_id').eq('id', worker_id).single();
+    let inZone = false;
+    if (worker?.project_id) {
+      const { data: fences } = await supabase.from('geofences').select('*').eq('project_id', worker.project_id);
+      if (fences) {
+        for (const fence of fences) {
+          const dist = haversineDistance(lat, lng, fence.center_lat, fence.center_lng);
+          if (dist <= fence.radius_meters) { inZone = true; break; }
+        }
+      }
+    }
+
+    const { data, error } = await supabase.from('gps_logs').insert({
+      worker_id, lat, lng, in_zone: inZone
+    }).select().single();
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ ...data, in_zone: inZone });
+  });
+
+  app.get("/api/gps/latest", authMiddleware, async (req: any, res) => {
+    if (!req.companyId) return res.json([]);
+    // Get latest GPS for each worker in company
+    const { data: workers } = await supabase.from('workers').select('id').eq('company_id', req.companyId).eq('status', 'active');
+    if (!workers?.length) return res.json([]);
+    
+    const results = [];
+    for (const w of workers) {
+      const { data: log } = await supabase.from('gps_logs').select('*')
+        .eq('worker_id', w.id)
+        .order('logged_at', { ascending: false })
+        .limit(1)
+        .single();
+      if (log) results.push(log);
+    }
+    res.json(results);
+  });
+
+  // ---- Attendance ----
+  app.get("/api/attendance", authMiddleware, async (req: any, res) => {
+    if (!req.companyId) return res.json([]);
+    const { project_id, date_from, date_to } = req.query;
+    
+    // Get company worker IDs
+    const { data: workers } = await supabase.from('workers').select('id, full_name').eq('company_id', req.companyId);
+    if (!workers?.length) return res.json([]);
+    const workerIds = workers.map(w => w.id);
+    const nameMap = Object.fromEntries(workers.map(w => [w.id, w.full_name]));
+
+    let query = supabase.from('attendance').select('*').in('worker_id', workerIds).order('date', { ascending: false });
+    if (project_id) query = query.eq('project_id', project_id);
+    if (date_from) query = query.gte('date', date_from);
+    if (date_to) query = query.lte('date', date_to);
+    
+    const { data } = await query;
+    const enriched = (data || []).map(a => ({ ...a, worker_name: nameMap[a.worker_id] || 'Неизвестный' }));
+    res.json(enriched);
+  });
+
+  app.post("/api/attendance/checkin", authMiddleware, async (req: any, res) => {
+    const { worker_id, project_id } = req.body;
+    if (!worker_id) return res.status(400).json({ error: 'worker_id обязателен' });
+    
+    const today = new Date().toISOString().split('T')[0];
+    // Check existing
+    const { data: existing } = await supabase.from('attendance')
+      .select('*').eq('worker_id', worker_id).eq('date', today).single();
+
+    if (existing) {
+      // Update check_in
+      const { data } = await supabase.from('attendance')
+        .update({ check_in: new Date().toISOString(), status: 'present' })
+        .eq('id', existing.id).select().single();
+      return res.json(data);
+    }
+
+    // Determine if late
+    const { data: worker } = await supabase.from('workers').select('work_start').eq('id', worker_id).single();
+    const now = new Date();
+    const [h, m] = (worker?.work_start || '08:00').split(':').map(Number);
+    const isLate = now.getHours() > h || (now.getHours() === h && now.getMinutes() > m + 15);
+
+    const { data, error } = await supabase.from('attendance').insert({
+      worker_id, project_id: project_id || null,
+      date: today,
+      check_in: now.toISOString(),
+      status: isLate ? 'late' : 'present',
+    }).select().single();
+    if (error) return res.status(500).json({ error: error.message });
+    res.json(data);
+  });
+
+  app.post("/api/attendance/checkout", authMiddleware, async (req: any, res) => {
+    const { worker_id } = req.body;
+    if (!worker_id) return res.status(400).json({ error: 'worker_id обязателен' });
+    
+    const today = new Date().toISOString().split('T')[0];
+    const { data: existing } = await supabase.from('attendance')
+      .select('*').eq('worker_id', worker_id).eq('date', today).single();
+    
+    if (!existing) return res.status(404).json({ error: 'Нет записи о приходе' });
+
+    const checkOut = new Date();
+    const checkIn = new Date(existing.check_in);
+    const hoursWorked = Math.round((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60) * 100) / 100;
+
+    // Calculate in-zone percentage from GPS logs
+    const { data: logs } = await supabase.from('gps_logs').select('in_zone')
+      .eq('worker_id', worker_id)
+      .gte('logged_at', existing.check_in)
+      .lte('logged_at', checkOut.toISOString());
+    
+    const totalLogs = logs?.length || 1;
+    const inZoneLogs = logs?.filter(l => l.in_zone).length || 0;
+    const inZonePercent = Math.round((inZoneLogs / totalLogs) * 100);
+
+    const { data } = await supabase.from('attendance').update({
+      check_out: checkOut.toISOString(),
+      hours_worked: hoursWorked,
+      in_zone_percent: inZonePercent,
+    }).eq('id', existing.id).select().single();
+    res.json(data);
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
