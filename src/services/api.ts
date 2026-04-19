@@ -45,6 +45,12 @@ async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Re
         const timeout2 = setTimeout(() => controller2.abort(), 60000);
         res = await fetch(API_BASE + url, { ...options, headers, signal: controller2.signal });
         clearTimeout(timeout2);
+      } else {
+        // Stale token from a different Supabase project — force sign out
+        console.warn('⚠️ Token refresh failed — forcing sign out (stale session)');
+        await supabase.auth.signOut();
+        window.location.href = '/';
+        throw new Error('Session expired — please sign in again');
       }
     }
     
