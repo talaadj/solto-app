@@ -13,9 +13,13 @@ export const ProcurementView = ({ requests, onSearch, projectAddress }: { reques
   const handleSearch = async (req: Request) => {
     setSearching(req.id);
     try {
-      const offers = await procurementAgent(req.title, req.description, projectAddress);
+      const result = await procurementAgent(req.title, req.description, projectAddress);
       
-      if (!offers || offers.length === 0) {
+      // Ensure offers is always an array (handle {offers: [...]} or [...] or other)
+      const offers = Array.isArray(result) ? result : 
+                     Array.isArray(result?.offers) ? result.offers : [];
+      
+      if (offers.length === 0) {
         alert("ИИ не смог найти подходящих предложений. Попробуйте уточнить техзадание или повторить поиск позже.");
         return;
       }
