@@ -200,24 +200,26 @@ async function snipSearchAgentFn(query: string) {
 }
 
 async function procurementAgentFn(requestTitle: string, requestDescription: string, projectAddress: string) {
-  const response = await withRetry(() => ai.models.generateContent({
-    model: "gemini-2.5-flash",
-    contents: `Найди реальных поставщиков строительных материалов:
+  let response: any;
+  try {
+    response = await withRetry(() => ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: `Найди реальных поставщиков строительных материалов:
 Потребность: "${requestTitle}"
 Описание: "${requestDescription}"
 Адрес объекта: "${projectAddress}"
 
 Приоритет: поставщики в Кыргызстане, затем СНГ.`,
-    config: {
-      tools: [{ googleSearch: {} }],
-      systemInstruction: `Вы — ИИ-агент Снабженец. Эксперт по закупкам строительных материалов в Кыргызстане и СНГ.
+      config: {
+        tools: [{ googleSearch: {} }],
+        systemInstruction: `Вы — ИИ-агент Снабженец. Эксперт по закупкам строительных материалов в Кыргызстане и СНГ.
 
 Задача:
 1. Найдите 5 реальных поставщиков через Google Search
 2. Для каждого найдите: название, телефон, email, адрес, цену, рейтинг
 3. Оцените надёжность (1-100) и риски
 
-ОБЯЗАТЕЛЬНО отвечайте ТОЛЬКО валидным JSON (без markdown):
+ОБЯЗАТЕЛЬНО отвечайте ТОЛЬКО валидным JSON (без markdown, без \`\`\`):
 {
   "offers": [
     {
@@ -234,15 +236,56 @@ async function procurementAgentFn(requestTitle: string, requestDescription: stri
     }
   ]
 }`
-    }
-  }));
+      }
+    }));
+  } catch (e: any) {
+    console.error("Procurement AI call failed:", e.message);
+    throw e;
+  }
 
-  const text = response.text || "{}";
+  // Extract text safely
+  let text = '';
   try {
-    return JSON.parse(text);
+    text = response?.text || '';
+    if (!text && response?.candidates?.[0]?.content?.parts) {
+      text = response.candidates[0].content.parts.map((p: any) => p.text || '').join('');
+    }
+  } catch (e: any) {
+    console.error("Procurement text extraction failed:", e.message);
+  }
+
+  if (!text || text.trim().length === 0) {
+    console.warn("Procurement: empty response from Gemini");
+    return { offers: [] };
+  }
+
+  // Strip markdown code blocks if present
+  text = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+
+  // Try parsing
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed.offers && Array.isArray(parsed.offers)) return parsed;
+    if (Array.isArray(parsed)) return { offers: parsed };
+    return { offers: [] };
   } catch {
-    const match = text.match(/\{[\s\S]*"offers"[\s\S]*\}/);
-    if (match) try { return JSON.parse(match[0]); } catch {}
+    // Try extracting JSON from text
+    const match = text.match(/\{[\s\S]*"offers"\s*:\s*\[[\s\S]*\]\s*\}/);
+    if (match) {
+      try {
+        const parsed = JSON.parse(match[0]);
+        return parsed;
+      } catch {}
+    }
+    // Try extracting just an array
+    const arrMatch = text.match(/\[[\s\S]*\]/);
+    if (arrMatch) {
+      try {
+        const arr = JSON.parse(arrMatch[0]);
+        if (Array.isArray(arr)) return { offers: arr };
+      } catch {}
+    }
+    console.warn("Procurement: could not parse response:", text.substring(0, 200));
     return { offers: [] };
   }
 }
@@ -352,9 +395,14 @@ async function startServer() {
   app.post("/api/ai/procurement", authMiddleware, async (req: any, res) => {
     if (!isGeminiConfigured) return res.status(400).json({ error: AI_KEY_ERROR });
     try {
+      console.log(`🔍 Procurement search: "${req.body.requestTitle}" for ${req.body.projectAddress}`);
       const result = await procurementAgentFn(req.body.requestTitle, req.body.requestDescription, req.body.projectAddress);
+      console.log(`✅ Procurement found ${result?.offers?.length || 0} offers`);
       res.json(result);
-    } catch (e: any) { handleAiError(e, res); }
+    } catch (e: any) { 
+      console.error("❌ Procurement error:", e.message);
+      handleAiError(e, res, { offers: [] }); 
+    }
   });
 
   app.post("/api/ai/accountant", authMiddleware, async (req: any, res) => {
