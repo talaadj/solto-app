@@ -29,16 +29,16 @@ export const DirectorView = ({ projects, requests, onApproveRequest, onRejectReq
 
   // Payment modal state
   const [paymentModal, setPaymentModal] = useState<{ offerId: number; requestId: number; offer: ProcurementOffer; request: Request } | null>(null);
-  const [payQuantity, setPayQuantity] = useState(1);
-  const [payAmount, setPayAmount] = useState(0);
+  const [payQuantity, setPayQuantity] = useState('1');
+  const [payAmount, setPayAmount] = useState('0');
   const [payMethod, setPayMethod] = useState('Банковский перевод');
   const [payNotes, setPayNotes] = useState('');
 
   const openPaymentModal = (offerId: number, requestId: number, offer: ProcurementOffer, request: Request) => {
     const qty = request.quantity || 1;
     const unitPrice = Number(offer.price) || 0;
-    setPayQuantity(qty);
-    setPayAmount(unitPrice * qty);
+    setPayQuantity(String(qty));
+    setPayAmount(String(unitPrice * qty));
     setPayMethod('Банковский перевод');
     setPayNotes('');
     setPaymentModal({ offerId, requestId, offer, request });
@@ -49,8 +49,8 @@ export const DirectorView = ({ projects, requests, onApproveRequest, onRejectReq
     setApprovingOffer(paymentModal.offerId);
     try {
       await onApproveOffer(paymentModal.offerId, paymentModal.requestId, {
-        approved_quantity: payQuantity,
-        approved_amount: payAmount,
+        approved_quantity: parseFloat(payQuantity) || 1,
+        approved_amount: parseFloat(payAmount) || 0,
         payment_method: payMethod,
         payment_notes: payNotes,
       });
@@ -606,13 +606,14 @@ export const DirectorView = ({ projects, requests, onApproveRequest, onRejectReq
                       Количество ({paymentModal.request.unit || 'шт'})
                     </label>
                     <input 
-                      type="number" min="0.01" step="0.01"
+                      type="text" inputMode="numeric"
                       className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 font-mono text-lg"
                       value={payQuantity}
                       onChange={(e) => {
-                        const q = Math.max(0.01, parseFloat(e.target.value) || 1);
-                        setPayQuantity(q);
-                        setPayAmount(q * (Number(paymentModal.offer.price) || 0));
+                        const raw = e.target.value.replace(/[^0-9.]/g, '').replace(/^0+(?=\d)/, '');
+                        setPayQuantity(raw);
+                        const q = parseFloat(raw) || 0;
+                        setPayAmount(String(q * (Number(paymentModal.offer.price) || 0)));
                       }}
                     />
                   </div>
@@ -628,10 +629,10 @@ export const DirectorView = ({ projects, requests, onApproveRequest, onRejectReq
                 <div>
                   <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block mb-1">Итого к оплате (сом)</label>
                   <input 
-                    type="number" min="0" step="1"
+                    type="text" inputMode="numeric"
                     className="w-full bg-indigo-50 border-2 border-indigo-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 font-mono text-2xl font-black text-indigo-700"
                     value={payAmount}
-                    onChange={(e) => setPayAmount(Math.max(0, parseFloat(e.target.value) || 0))}
+                    onChange={(e) => setPayAmount(e.target.value.replace(/[^0-9.]/g, '').replace(/^0+(?=\d)/, ''))}
                   />
                 </div>
 
@@ -673,7 +674,7 @@ export const DirectorView = ({ projects, requests, onApproveRequest, onRejectReq
                 </button>
                 <button 
                   onClick={handlePaymentSubmit}
-                  disabled={payAmount <= 0 || approvingOffer === paymentModal.offerId}
+                  disabled={(parseFloat(payAmount) || 0) <= 0 || approvingOffer === paymentModal.offerId}
                   className="flex-1 py-3 rounded-xl text-sm font-black bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:from-indigo-700 hover:to-purple-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {approvingOffer === paymentModal.offerId ? (
@@ -682,7 +683,7 @@ export const DirectorView = ({ projects, requests, onApproveRequest, onRejectReq
                       Обработка...
                     </>
                   ) : (
-                    `Подтвердить ${payAmount.toLocaleString()} сом`
+                    `Подтвердить ${(parseFloat(payAmount) || 0).toLocaleString()} сом`
                   )}
                 </button>
               </div>

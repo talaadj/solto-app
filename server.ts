@@ -498,6 +498,59 @@ async function startServer() {
     res.json({ success: true });
   });
 
+  // Issue item from inventory
+  app.post("/api/inventory/:id/issue", authMiddleware, async (req: any, res) => {
+    const itemId = parseInt(req.params.id);
+    const { issued_to, quantity, notes } = req.body;
+    if (!issued_to || !quantity || quantity <= 0) return res.status(400).json({ error: 'Укажите получателя и количество' });
+
+    // Check current stock
+    const { data: item, error: itemErr } = await supabase.from('inventory').select('*').eq('id', itemId).single();
+    if (itemErr || !item) return res.status(404).json({ error: 'Товар не найден' });
+    if (item.quantity < quantity) return res.status(400).json({ error: `Недостаточно на складе. Остаток: ${item.quantity} ${item.unit}` });
+
+    // Decrease stock
+    const { error: updateErr } = await supabase.from('inventory').update({ quantity: item.quantity - quantity }).eq('id', itemId);
+    if (updateErr) return res.status(500).json({ error: updateErr.message });
+
+    // Record issue
+    const { data: issue, error: issueErr } = await supabase.from('inventory_issues').insert({
+      inventory_item_id: itemId,
+      issued_to,
+      quantity,
+      notes: notes || '',
+      company_id: req.companyId,
+    }).select().single();
+    if (issueErr) return res.status(500).json({ error: issueErr.message });
+
+    res.json(issue);
+  });
+
+  // Get issue history for an item
+  app.get("/api/inventory/:id/issues", authMiddleware, async (req: any, res) => {
+    const itemId = parseInt(req.params.id);
+    const { data, error } = await supabase
+      .from('inventory_issues')
+      .select('*')
+      .eq('inventory_item_id', itemId)
+      .eq('company_id', req.companyId)
+      .order('issued_at', { ascending: false });
+    if (error) return res.status(500).json({ error: error.message });
+    res.json(data || []);
+  });
+
+  // Get all issues for PDF (all items in company)
+  app.get("/api/inventory/issues/all", authMiddleware, async (req: any, res) => {
+    if (!req.companyId) return res.json([]);
+    const { data, error } = await supabase
+      .from('inventory_issues')
+      .select('*, inventory!inner(item_name, unit)')
+      .eq('company_id', req.companyId)
+      .order('issued_at', { ascending: false });
+    if (error) return res.status(500).json({ error: error.message });
+    res.json(data || []);
+  });
+
   // ---- Transactions ----
   app.get("/api/transactions", authMiddleware, async (req: any, res) => {
     if (!req.companyId) return res.json([]);

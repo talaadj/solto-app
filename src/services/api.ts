@@ -207,6 +207,15 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ item_name, quantity, unit }),
     }).then(r => r.json()),
+  issueFromInventory: (id: number, issued_to: string, quantity: number, notes: string) =>
+    fetchWithAuth(`/api/inventory/${id}/issue`, {
+      method: 'POST',
+      body: JSON.stringify({ issued_to, quantity, notes }),
+    }).then(r => r.json()),
+  getInventoryIssues: (id: number) =>
+    fetchWithAuth(`/api/inventory/${id}/issues`).then(jsonArray),
+  getAllIssues: () =>
+    fetchWithAuth('/api/inventory/issues/all').then(jsonArray),
 
   // Transactions
   getTransactions: () => fetchWithAuth('/api/transactions').then(jsonArray),

@@ -171,15 +171,18 @@ function AppContent() {
       if (!offer) throw new Error("Approved offer not found");
 
       const request = requests.find(r => r.id === requestId);
-      const priceNum = typeof offer.price === 'number' ? offer.price : parseFloat(offer.price) || 0;
+      // Use approved_amount (from director's payment modal), fallback to base price
+      const amount = Number(offer.approved_amount) || (typeof offer.price === 'number' ? offer.price : parseFloat(offer.price) || 0);
+      const qty = Number(offer.approved_quantity) || request?.quantity || 1;
+      const unit = request?.unit || 'шт';
       const actionDesc = `Оплата поставщику ${offer.supplier_name} за ${offer.details} (Проект: ${currentProject?.name})`;
-      const accountingDetails = await accountantAgent('Оплата поставщику', priceNum, actionDesc);
+      const accountingDetails = await accountantAgent('Оплата поставщику', amount, actionDesc);
 
-      await api.createTransaction('expense', priceNum, accountingDetails);
+      await api.createTransaction('expense', amount, accountingDetails);
       await api.updateRequestStatus(requestId, 'purchased');
 
-      const itemName = offer.details || request?.title || 'Материал';
-      await api.updateInventory(itemName, 1, 'шт');
+      const itemName = request?.title || offer.details || 'Материал';
+      await api.updateInventory(itemName, qty, unit);
 
       fetchData();
       fetchRequests();
@@ -541,7 +544,7 @@ function AppContent() {
               {activeView === 'director' && <DirectorView projects={projects} requests={requests} onApproveRequest={handleApproveRequest} onRejectRequest={handleRejectRequest} onApproveOffer={handleApproveOffer} onRefresh={fetchRequests} currentProjectId={currentProject?.id || null} />}
               {activeView === 'procurement' && <ProcurementView requests={requests} onSearch={fetchRequests} projectAddress={currentProject?.address || 'Кыргызстан'} />}
               {activeView === 'accountant' && <AccountantView transactions={transactions} requests={requests} onProcessPayment={handleProcessPayment} />}
-              {activeView === 'storekeeper' && <StorekeeperView inventory={inventory} onAddItem={handleAddItem} />}
+              {activeView === 'storekeeper' && <StorekeeperView inventory={inventory} onAddItem={handleAddItem} onRefresh={async () => { const inv = await api.getInventory(); setInventory(inv); }} />}
               {activeView === 'team' && <TeamManagementView projects={projects} />}
               {activeView === 'gantt' && <GanttView projects={projects} selectedProject={currentProject} />}
               {activeView === 'profile' && <ProfileView profile={profile!} onProfileUpdate={setProfile} />}
